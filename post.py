@@ -8,7 +8,7 @@ def signed2(x):
 def signed10(x):
     return (x & 0x3ff) * (-1 if (x & 0x400) else 1)
 gsf = [
-lambda x: 0     , # 0   Multiply by 0
+lambda x: x     , # 0   Multiply by 0
 lambda x: x*2   , # 1   Multiply by 2
 lambda x: x*4   , # 2   Multiply by 4
 lambda x: x*8   , # 3   Multiply by 8
@@ -35,6 +35,8 @@ class DVG:
         self.stack = []
 
     def draw(self, dx, dy, bright):
+        dx = self.sf(dx)
+        dy = self.sf(dy)
         x1 = self.x + dx
         y1 = self.y + dy
         if bright:
@@ -55,9 +57,7 @@ class DVG:
                 f = self.mem[self.pc // 2 + 1]
                 bright = f >> 12
                 dx = signed10(f)
-                s = 1 << (9 - (self.s + cmd))
-                x1 = self.x + dx / s
-                y1 = self.y + dy / s
+                s = 1 << (9 - cmd)
                 self.draw(dx / s, dy / s, bright)
                 print("               VEC scale=%02d bri=%-2d  x=%-5d y=%-5d (%.4f, %.4f)" % (self.s + cmd, bright, dx, dy, dx / s, dy / s))
                 self.pc += 4
@@ -65,6 +65,7 @@ class DVG:
                 self.y = insn & 0x3ff
                 f = self.mem[self.pc // 2 + 1]
                 self.s = f >> 12
+                self.sf = gsf[f >> 12]
                 self.x = f & 0x3ff
                 self.pc += 4
             elif cmd == 0xb:
@@ -82,10 +83,13 @@ class DVG:
                 bright = (insn >> 4) & 0xf
                 SF1 = 1 & (insn >> 3)
                 SF0 = 1 & (insn >> 11)
-                sf = 2 + (2 * SF1 + SF0)
-                s = 1 << (9 - (self.s + sf))
+                s = {
+                    (0, 0) : 128,
+                    (0, 1) : 64,
+                    (1, 0) : 32,
+                    (1, 1) : 16}[(SF1, SF0)]
                 self.draw(dx / s, dy / s, bright)
-                print("               SVEC scale=%02d bri=%-2d  x=%-5d y=%-5d (%.4f, %.4f)" % (sf, bright, dx, dy, dx / s, dy / s))
+                print("               SVEC scale=%02d bri=%-2d  x=%-5d y=%-5d (%.4f, %.4f) S=%d" % (s, bright, dx, dy, dx / s, dy / s, self.s))
                 self.pc += 2
             else:
                 assert 0, hex(cmd)
@@ -106,9 +110,18 @@ def post(srams):
         frame = int(sram[4:])
         ram = bytes([int(l,16) for l in open(sram) if l[0] != "/"])
         mem = array.array("H", ram + bytes(2048) + rom + bytes(2048))
+        assert len(mem) == 4096
         dvg = DVG(mem)
         dvg.run()
         dvg.save("%04d.png" % frame)
 
+def post2(fn):
+    mem = array.array("H", bytes([int(l,16) for l in open(fn) if l[0] != "/"]))
+    assert len(mem) == 4096, fn
+    dvg = DVG(mem)
+    dvg.run()
+    dvg.save("out.png")
+
 if __name__ == "__main__":
     post(sys.argv[1:])
+    # post2("snapshot")
