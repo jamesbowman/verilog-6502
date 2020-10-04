@@ -48,6 +48,11 @@ reg  IRHOLD_valid;      // Valid instruction in IRHOLD
 
 reg  [7:0] AXYS[3:0];   // A, X, Y and S register file
 
+wire [7:0] debug_A = AXYS[0];
+wire [7:0] debug_S = AXYS[1];
+wire [7:0] debug_X = AXYS[2];
+wire [7:0] debug_Y = AXYS[3];
+
 reg  C = 0;             // carry flag (init at zero to avoid X's in ALU sim)
 reg  Z = 0;             // zero flag
 reg  I = 0;             // interrupt flag
