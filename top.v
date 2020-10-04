@@ -38,7 +38,12 @@ module bram_tdp #(
     input    wire    [DATA-1:0]  b_din,
     output   reg     [DATA-1:0]  b_dout
 );
+    integer i;
   reg [DATA-1:0] mem [(2**ADDR)-1:0];
+  initial begin
+    for (i = 0; i < (2**ADDR); i++)
+      mem[i] <= 8'he9;
+  end
   // Port A
   always @(posedge a_clk) begin
       a_dout      <= mem[a_addr];
@@ -63,6 +68,7 @@ module top();
 
   integer t;
   integer i;
+  integer frame = 0;
   reg clk, reset;
 
   cpu _cpu( clk, reset, AB, DI, DO, WE, IRQ, NMI, RDY );
@@ -72,7 +78,7 @@ module top();
   wire [7:0] DO;        // data out, write bus
   wire WE;              // write enable
   reg IRQ;              // interrupt request
-  reg NMI;              // non-maskable interrupt request
+  wire NMI;             // non-maskable interrupt request
   reg RDY;              // Ready signal. Pauses CPU when RDY=0
 
   reg [15:0] AB_;
@@ -124,6 +130,12 @@ module top();
     .b_dout()
     );
 
+  reg [12:0] div250 = 0;
+  wire div250w = (div250 == 13'd5999);
+  always @(posedge clk)
+    div250 <= div250w ? 13'd0 : (div250 + 13'd1);
+  assign NMI = ~div250w;
+
   reg [8:0] divider = 0;
   always @(posedge clk)
     divider <= divider + 9'd1;
@@ -131,7 +143,7 @@ module top();
   always @(posedge clk)
     case (AB[15:0])
     15'h2001:  d20 <= {8{divider[8]}};
-    15'h2007:  d20 <= 8'hff;             // SWTEST
+    15'h2007:  d20 <= 8'h00;             // SWTEST
     default:
       d20 <= 8'h00;
     endcase
@@ -151,7 +163,6 @@ module top();
 
     clk = 0;
     IRQ = 1;
-    NMI = 1;
     RDY = 1;
 
     reset = 1; #20;
@@ -165,23 +176,27 @@ module top();
       end
       #1;
     end
-
-
   end
 
   always #5 clk = ~clk;
 
   always @(negedge clk) begin
-    if (t > 600000)
+    if ((t % 1000) == 0)
       $display("t=%d PC=%x A=%x X=%X Y=%x", t, _cpu.PC, _cpu.debug_A, _cpu.debug_X, _cpu.debug_Y);
+    if (~NMI)
+      $display("NMI");
     t += 1;
   end
+
+  wire [7:0] dig1 = 8'h30 + (frame / 10);
+  wire [7:0] dig2 = 8'h30 + (frame % 10);
   always @(posedge clk) begin
     if (WE & (AB == 16'h3000)) begin
-      for (i = 0; i < 16; i++)
-        $display("%x: %x", i, sram.mem[i]);
-      $writememh("sram", sram.mem);
-      $finish;
+      $display("FRAME", frame);
+      $writememh({"sram", dig1, dig2}, sram.mem);
+      if (frame == 99)
+        $finish;
+      frame = frame + 1;
     end
   end
 

@@ -1,4 +1,5 @@
 import zipfile
+import sys
 import array
 from PIL import Image, ImageDraw
 
@@ -6,6 +7,24 @@ def signed2(x):
     return (x & 0x3) * (-1 if (x & 0x4) else 1)
 def signed10(x):
     return (x & 0x3ff) * (-1 if (x & 0x400) else 1)
+gsf = [
+lambda x: 0     , # 0   Multiply by 0
+lambda x: x*2   , # 1   Multiply by 2
+lambda x: x*4   , # 2   Multiply by 4
+lambda x: x*8   , # 3   Multiply by 8
+lambda x: x*16  , # 4   Multiply by 16
+lambda x: x*32  , # 5   Multiply by 32
+lambda x: x*64  , # 6   Multiply by 64
+lambda x: x*128 , # 7   Multiply by 128
+lambda x: x/256 , # 8   Divide by 256
+lambda x: x/128 , # 9   Divide by 128
+lambda x: x/64  , # 10  Divide by 64
+lambda x: x/32  , # 11  Divide by 32
+lambda x: x/16  , # 12  Divide by 16
+lambda x: x/8   , # 13  Divide by 8
+lambda x: x/4   , # 14  Divide by 4
+lambda x: x/2   , # 15  Divide by 2
+]
 
 class DVG:
     def __init__(self, mem):
@@ -19,7 +38,7 @@ class DVG:
         x1 = self.x + dx
         y1 = self.y + dy
         if bright:
-            self.dr.line((self.x, 1024 - self.y, x1, 1024 - y1), 255)
+            self.dr.line((self.x, 1024 - self.y, x1, 1024 - y1), 15 * bright)
         (self.x, self.y) = (x1, y1)
 
     def run(self):
@@ -45,8 +64,8 @@ class DVG:
             elif cmd == 0xa:
                 self.y = insn & 0x3ff
                 f = self.mem[self.pc // 2 + 1]
-                s = f >> 12
-                x = f & 0x3ff
+                self.s = f >> 12
+                self.x = f & 0x3ff
                 self.pc += 4
             elif cmd == 0xb:
                 return
@@ -72,21 +91,24 @@ class DVG:
                 assert 0, hex(cmd)
 
     def goto(self, aa):
+        self.pc = aa * 2
+        return
         self.pc = (aa - 0x800) * 2 + 0x800
 
     def save(self, fn):
         self.im.save(fn)
 
-def post():
+def post(srams):
     with zipfile.ZipFile("asteroids_rom_2.zip") as z:
         with z.open("035127.02", "r") as f:
             rom = f.read()
-    ram = bytes([int(l,16) for l in open("sram") if l[0] != "/"])
-    mem = array.array("H", ram + rom)
-    dvg = DVG(mem)
-    dvg.run()
-    dvg.save("out.png")
+    for sram in srams:
+        frame = int(sram[4:])
+        ram = bytes([int(l,16) for l in open(sram) if l[0] != "/"])
+        mem = array.array("H", ram + bytes(2048) + rom + bytes(2048))
+        dvg = DVG(mem)
+        dvg.run()
+        dvg.save("%04d.png" % frame)
 
 if __name__ == "__main__":
-    post()
-
+    post(sys.argv[1:])

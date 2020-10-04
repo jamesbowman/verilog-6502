@@ -1,0 +1,6 @@
+sram[0-9]*
+*.png
+*.hex
+asteroids_rom_2.zip
+a.out
+dump.vcd
