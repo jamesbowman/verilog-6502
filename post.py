@@ -107,13 +107,13 @@ def post(srams):
         with z.open("035127.02", "r") as f:
             rom = f.read()
     for sram in srams:
-        frame = int(sram[4:])
+        frame = sram[4:]
         ram = bytes([int(l,16) for l in open(sram) if l[0] != "/"])
         mem = array.array("H", ram + bytes(2048) + rom + bytes(2048))
         assert len(mem) == 4096
         dvg = DVG(mem)
         dvg.run()
-        dvg.save("%04d.png" % frame)
+        dvg.save("%s.png" % frame)
 
 def post2(fn):
     mem = array.array("H", bytes([int(l,16) for l in open(fn) if l[0] != "/"]))
