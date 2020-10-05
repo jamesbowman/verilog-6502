@@ -15,7 +15,7 @@ module top();
   wire sw1start;
 
   asteroids _asteroids(
-    .clk(clk),
+    .fastclk(clk),
     .reset(reset),
     .sw1start(sw1start),
     .GODVG(GODVG),
@@ -27,26 +27,20 @@ module top();
 
   initial begin
 
+    // $dumpfile("dump.vcd"); $dumpvars(0);
     clk = 0;
 
-    reset = 1; #20;
+    reset = 1; #100;
     reset = 0; #1;
 
     t = 0;
-
-    while (t < 600000) begin
-      if (t == -1) begin
-        $dumpfile("dump.vcd"); $dumpvars(0);
-      end
-      #1;
-    end
   end
 
   always #5 clk = ~clk;
 
   always @(negedge clk) begin
-    if ((t % 1000) == 0)
-      $display("t=%d PC=%x A=%x X=%X Y=%x", t, _asteroids._cpu.PC, _asteroids._cpu.debug_A, _asteroids._cpu.debug_X, _asteroids._cpu.debug_Y);
+    if ((t % 16000) == 0) $display("t=%d", t / 16);
+    // if ((t % 1000) == 0) $display("t=%d PC=%x A=%x X=%X Y=%x", t, _asteroids._cpu.PC, _asteroids._cpu.debug_A, _asteroids._cpu.debug_X, _asteroids._cpu.debug_Y);
     t += 1;
   end
 
@@ -72,7 +66,7 @@ module top();
       $display("FRAME", frame);
       $writememh({"sram", dig1, dig2, dig3}, _asteroids.sram.mem, 0, 2047);
       snapshot();
-      if (frame == 3)
+      if (frame == 0)
         $finish;
       frame = frame + 1;
     end

@@ -70,7 +70,7 @@ module ast_bram_tdp #(
 endmodule
 
 module asteroids(
-  input wire clk,
+  input wire fastclk,
   input wire reset,
   input wire sw1start,
   output wire GODVG,
@@ -80,6 +80,7 @@ module asteroids(
   output wire [15:0] debug
   );
 
+`ifdef NO
   wire [15:0] AB;       // address bus
   reg [7:0] DI;         // data in, read bus
   wire [7:0] DO;        // data out, write bus
@@ -88,6 +89,37 @@ module asteroids(
   wire NMI;             // non-maskable interrupt request
   wire RDY;             // Ready signal. Pauses CPU when RDY=0
   cpu6502 _cpu( clk, reset, AB, DI, DO, WE, IRQ, NMI, RDY );
+`else
+  reg [3:0] div16 = 0;
+  always @(posedge fastclk)
+    div16 <= div16 + 4'd1;
+  wire clk = div16[3];
+  wire phirise = div16 == 4'h8; // PHI rising edge
+
+  wire [15:0] AB;       // address bus
+  reg [7:0] DI;         // data in, read bus
+  wire [7:0] DO;        // data out, write bus
+  wire rw;
+  wire WE;              // write enable
+  wire NMI;             // non-maskable interrupt request
+
+  chip_6502 _cpu (
+    .clk(fastclk),    // FPGA clock
+    .phi(clk),    // 6502 clock
+    .res(~reset),
+    .so(1'b1),
+    .rdy(1'b1),
+    .nmi(~NMI),
+    .irq(1'b1),
+    .dbi(DI),
+    .dbo(DO),
+    .rw(rw),
+    .sync(),
+    .ab(AB));
+  assign WE = ~rw;
+
+`endif
+
   assign debug = AB;
 
   assign IRQ = 1;
@@ -100,8 +132,9 @@ module asteroids(
   assign dvgd = dvgs ? dvgad1 : dvgad0;
 
   reg [15:0] AB_;
-  always @(posedge clk)
-    AB_ <= AB;
+  always @(posedge fastclk)
+    if (phirise)
+      AB_ <= AB;
 
   wire [7:0] d00, d40, d50, d68, d70, d78;
   reg [7:0] d20;
@@ -150,22 +183,25 @@ module asteroids(
 
   reg [12:0] div250 = 0;
   wire div250w = (div250 == 13'd5999);
-  always @(posedge clk)
-    div250 <= div250w ? 13'd0 : (div250 + 13'd1);
+  always @(posedge fastclk)
+    if (phirise)
+      div250 <= div250w ? 13'd0 : (div250 + 13'd1);
   assign NMI = ~div250w;
 
   reg [8:0] divider = 0;
-  always @(posedge clk)
-    divider <= divider + 9'd1;
+  always @(posedge fastclk)
+    if (phirise)
+      divider <= divider + 9'd1;
 
-  always @(posedge clk)
-    case (AB[15:0])
-    15'h2001:  d20 <= {8{divider[8]}};
-    15'h2007:  d20 <= 8'h00;             // SWTEST
-    15'h2403:  d20 <= {8{sw1start}};     // SW1START
-    default:
-      d20 <= 8'h00;
-    endcase
+  always @(posedge fastclk)
+    if (phirise)
+      case (AB[15:0])
+      15'h2001:  d20 <= {8{divider[8]}};
+      15'h2007:  d20 <= 8'h00;             // SWTEST
+      15'h2403:  d20 <= {8{sw1start}};     // SW1START
+      default:
+        d20 <= 8'h00;
+      endcase
 
   always @*
     case (AB_[15:0] & 16'h7800)
