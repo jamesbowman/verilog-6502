@@ -25,7 +25,7 @@ module rom(clka, ena, aa, da,   clkb, enb, ab, db);
       db <= r[ab];
 endmodule
 
-module bram_tdp #(
+module ast_bram_tdp #(
     parameter DATA = 8,
     parameter ADDR = 8
 ) (
@@ -46,7 +46,7 @@ module bram_tdp #(
     integer i;
   reg [DATA-1:0] mem [(2**ADDR)-1:0];
   initial begin
-    for (i = 0; i < (2**ADDR); i++)
+    for (i = 0; i < (2**ADDR); i = i + 1)
       mem[i] <= 8'he9;
   end
   // Port A
@@ -76,7 +76,8 @@ module asteroids(
   output wire GODVG,
   input wire dvgclk,
   input wire [12:0] dvga,
-  output wire [7:0] dvgd
+  output wire [7:0] dvgd,
+  output wire [15:0] debug
   );
 
   wire [15:0] AB;       // address bus
@@ -86,7 +87,8 @@ module asteroids(
   wire IRQ;             // interrupt request
   wire NMI;             // non-maskable interrupt request
   wire RDY;             // Ready signal. Pauses CPU when RDY=0
-  cpu _cpu( clk, reset, AB, DI, DO, WE, IRQ, NMI, RDY );
+  cpu6502 _cpu( clk, reset, AB, DI, DO, WE, IRQ, NMI, RDY );
+  assign debug = AB;
 
   assign IRQ = 1;
   assign RDY = 1;
@@ -114,7 +116,7 @@ module asteroids(
   reg RAMSEL = 0;
 
   wire reverse = AB[9] & RAMSEL;
-  bram_tdp #(.DATA(8), .ADDR(10)) zram (
+  ast_bram_tdp #(.DATA(8), .ADDR(10)) zram (
     .a_clk(clk),
     .a_wr(WE & zram_we),
     .a_addr({AB[9], AB[8] ^ reverse, AB[7:0]}),
@@ -134,7 +136,7 @@ module asteroids(
 
   wire sram_we = (AB & 16'h7800) == 16'h4000;
 
-  bram_tdp #(.DATA(8), .ADDR(11)) sram (
+  ast_bram_tdp #(.DATA(8), .ADDR(11)) sram (
     .a_clk(clk),
     .a_wr(WE & sram_we),
     .a_addr(AB[10:0]),

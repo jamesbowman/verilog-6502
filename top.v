@@ -72,7 +72,7 @@ module top();
       $display("FRAME", frame);
       $writememh({"sram", dig1, dig2, dig3}, _asteroids.sram.mem, 0, 2047);
       snapshot();
-      if (frame == 999)
+      if (frame == 3)
         $finish;
       frame = frame + 1;
     end
