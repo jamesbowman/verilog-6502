@@ -111,6 +111,7 @@ def post(srams):
         ram = bytes([int(l,16) for l in open(sram) if l[0] != "/"])
         mem = array.array("H", ram + bytes(2048) + rom + bytes(2048))
         assert len(mem) == 4096
+        open("dump", "wb").write(mem.tobytes())
         dvg = DVG(mem)
         dvg.run()
         dvg.save("%s.png" % frame)
