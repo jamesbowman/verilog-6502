@@ -8,7 +8,7 @@ create dvg 8192 allot
 
 s" out" w/o bin create-file drop constant out
 create spot 2 allot
-: >gd ( d. )
+: >spid ( d. )
     swap
     spot w! spot 2 out write-file throw
     spot w! spot 2 out write-file throw
@@ -17,11 +17,22 @@ create spot 2 allot
 : dvg@
     2* dvg + w@ ;
 
-variable x
+: ><
+    dup 8 lshift swap 8 rshift or ;
+
+\ ------------------------------------------------------------
+
+: lines
+    $0004 $1f00 >spid ;
+
+900 constant WIDTH
+
+variable x                  \ beam position, DVG coordinates
 variable y
-variable scale
-variable bright
-variable sl
+variable sg                 \ global scale
+variable sl                 \ local scale
+variable bright             \ brightness, 0-15
+variable (bright)
 
 : fetch ( pc -- pc' insn )
     dup 1+ swap dvg@    ( pc insn )
@@ -30,39 +41,58 @@ variable sl
 : hi4 ( u -- u x )
     dup 12 rshift ;
 
+\ return x * (2 ^ s)
+\ where s is (sg - 9 + sl), signed 4-bit
+
+: scale ( x - x )
+    sg @ 9 - sl @ + $f and
+    dup 8 < if
+        lshift
+    else
+        16 swap - rshift
+    then ;
+
 : signed10 ( u -- x )
-    dup $3ff and
-    9 sl @ - rshift
+    dup $3ff and scale
     swap $400 and if negate then
     ;
 
 : signed2 ( u -- x )
-    dup $3 and 8 lshift
-    9 sl @ - rshift
-    swap $4 and if negate then
+    $700 and signed10
     ;
 
-: s8
-    dup 8 and 2* - ;
-
-: gs ( x -- x ) \ global scale
-    8 lshift
-    scale @ s8 8 + lshift
-    16 0 do 2/ loop
+\ brightness of 0 means move
+: setbright
+    bright @ 
+    dup 0= if
+        lines drop exit
+    then
+    dup (bright) @ = if
+        drop exit
+    then
+    dup (bright) !
+    16 * $1000 >spid
     ;
+
+\ from native 0-1023 to EVE coordinate
+: screen
+    512 - WIDTH 16 * 1024 */ ;
 
 : plot
-    cr ." xy " x @ . y @ . bright @ .
+    setbright
+    \ cr ." xy " x @ . y @ . bright @ .
+    y @ screen negate $7fff and
+    x @ screen tuck 15 lshift or
+    swap $7fff and 2/ $4000 or
+    >spid
     ;
 
 : draw ( x y )
-    \ swap gs . gs .
-    gs y +! gs x +!
-    plot
+    y +! x +!  plot
     ;
 
-: handle-VEC ( pc insn op )
-    cr 14 spaces ." VEC "
+: handle-VEC ( pc insn op -- pc' )
+    \ cr 14 spaces ." VEC "
     sl !
     signed10 >r
     fetch hi4 bright !
@@ -71,49 +101,62 @@ variable sl
     ;
 
 : handle-SVEC ( insn )
-    cr 14 spaces ." SVEC "
-    >r
-    r@ 4 rshift $f and bright !
+    \ cr 14 spaces ." SVEC "
+    dup >r
+    4 rshift $f and bright !
     r@ 11 rshift 1 and 
-    r@ 3 rshift 1 and 2* +
+    r@ 2 rshift 2 and +
     2 + sl !
-    r@ signed2 r> 8 rshift signed2 draw
+    r@ >< signed2 r> signed2 draw
+    ;
+
+: handle-LABS ( pc insn op -- pc' )
+    $3ff and y !
+    fetch hi4 sg ! $3ff and x !
+    0 bright !
+    plot ;
+
+: gd-preamble
+    $ff00 $ffff >spid     \ cmd_dlstart
+    $1010 $0210 >spid     \ ClearColor
+    $0007 $2600 >spid     \ Clear
+    $0004 $2700 >spid     \ VertexFormat(0)
+    $0011 $0b00 >spid     \ gd.BlendFunc(eve.SRC_ALPHA, 1)
+    $2800 $2b00 >spid     \ screen center
+    $1680 $2c00 >spid
+    lines
     ;
 
 : run
     0
     begin
         fetch
-        cr over 1- hex. dup hex.
+        \ cr over 1- hex. dup hex.
         hi4
         case
-        $a of
-            $3ff and y !
-            fetch hi4 scale ! $3ff and x !
-            0 bright !
-            plot
-        endof
-        $b of 2drop exit endof
-        $c of $fff and endof
-        $d of 2drop endof
-        $f of handle-SVEC endof
-        dup $a u< if
-            handle-VEC
-            0
-        else
-            abort" illegal opcode"
-        then
+        $a of handle-LABS endof     ( LABS )
+        $b of 2drop exit endof      ( HALT )
+        $c of $fff and endof        ( JSRL )
+        $d of 2drop endof           ( RTSL )
+        $e of nip $fff and endof    ( JMPL )
+        $f of handle-SVEC endof     ( SVEC )
+        handle-VEC 0                ( VEC  )
         endcase
     again
-;
+    ;
+
+: render
+    gd-preamble
+    -1 (bright) !
+    run
+    0 0 >spid
+    $ff01 $ffff >spid
+    ;
+
+\ ------------------------------------------------------------
 
 preload
-run
-hex .s
-
-cr x @ . y @ . scale @ .
-
-$4567 $1234 >gd
-
+render
+depth 0<> throw
 out close-file throw
 bye
