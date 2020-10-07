@@ -45,11 +45,12 @@ variable (bright)
 \ where s is (sg - 9 + sl), signed 4-bit
 
 : scale ( x - x )
-    sg @ 9 - sl @ + $f and
-    dup 8 < if
-        lshift
+    sg @ dup 8 and 2* -
+    9 - sl @ +
+    dup 0< if
+        negate rshift
     else
-        16 swap - rshift
+        lshift
     then ;
 
 : signed10 ( u -- x )
